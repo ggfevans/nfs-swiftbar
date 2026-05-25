@@ -28,6 +28,14 @@ grey if everything's merely idle. Header shows `N/total active`.
   This is the genuinely useful action under autofs: it recovers a stale `soft`
   mount after a network blip, which a plain toggle can't.
 
+## Root menu
+
+- **Force remount all (sudo)** — runs the force-remount across every share in
+  the map. All the `umount -f`s are chained into a single privileged
+  `osascript` call, so you're prompted for admin **once**, not per share; each
+  share is then re-triggered and a `Force-remounted N/total` summary is shown.
+  Note this brings idle shares up too (they'll idle-unmount again after 1h).
+
 ## Design note — don't defeat the idle timeout
 
 The 30s poll never `ls`/`stat`/`df`s the mount paths; status comes only from the

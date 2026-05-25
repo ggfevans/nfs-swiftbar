@@ -2,7 +2,7 @@
 # SwiftBar plugin: NFS automount status + recovery
 #
 # <bitbar.title>NFS Mounts</bitbar.title>
-# <bitbar.version>v1.2</bitbar.version>
+# <bitbar.version>v1.3</bitbar.version>
 # <bitbar.author>Gareth Evans</bitbar.author>
 # <bitbar.author.github>ggfevans</bitbar.author.github>
 # <bitbar.desc>Status of autofs NFS shares (active / idle / unreachable) with a sudo force-remount recovery action. Reads mounts from /etc/auto_direct.</bitbar.desc>
@@ -100,6 +100,35 @@ if [ "${1:-}" = "freespace" ]; then
     exit 0
 fi
 
+# `nfs.30s.sh remount-all` — force-remount every share in the map. All the
+# `umount -f`s are chained into ONE privileged osascript call, so the user is
+# prompted for admin rights just once (not once per share). Each share is then
+# re-triggered as the normal user, bounded, and a summary is reported.
+if [ "${1:-}" = "remount-all" ]; then
+    [ -r "$MAP" ] || exit 0
+    mps=()
+    while read -r mp opts target rest || [ -n "$mp" ]; do
+        case "$mp" in ''|\#*) continue ;; esac
+        [ -n "$target" ] || continue
+        mps+=("$mp")
+    done < "$MAP"
+    [ "${#mps[@]}" -gt 0 ] || exit 0
+
+    cmd=""
+    for mp in "${mps[@]}"; do
+        cmd="$cmd/sbin/umount -f $(printf '%q' "$mp"); "
+    done
+    osascript -e "do shell script \"$(as_escape "$cmd")\" with administrator privileges" >/dev/null 2>&1
+
+    ok=0
+    for mp in "${mps[@]}"; do
+        perl -e 'alarm 5; exec @ARGV' /bin/ls "$mp" >/dev/null 2>&1
+        is_mounted "$mp" && ok=$((ok + 1))
+    done
+    notify "NFS" "Force-remounted $ok/${#mps[@]} share(s)"
+    exit 0
+fi
+
 # ---------------------------------------------------------------------------
 # Rendering helpers — shared by the live poll and --selftest so formatting,
 # icons and colours can never drift between them.
@@ -151,6 +180,7 @@ if [ "${1:-}" = "--selftest" ]; then
     emit_share "/Volumes/demo-unreachable" unreachable
     printf '%s' "$DROPDOWN"
     echo "---"
+    echo "Force remount all (sudo) | bash=\"$SELF\" param1=\"remount-all\" terminal=false refresh=true"
     echo "Refresh | bash=\"true\" terminal=false refresh=true"
     exit 0
 fi
@@ -220,4 +250,5 @@ echo "NFS Mounts · ${ACTIVE}/${TOTAL} active | disabled=true"
 echo "---"
 printf '%s' "$DROPDOWN"
 echo "---"
+[ "$TOTAL" -gt 0 ] && echo "Force remount all (sudo) | bash=\"$SELF\" param1=\"remount-all\" terminal=false refresh=true"
 echo "Refresh | bash=\"true\" terminal=false refresh=true"
