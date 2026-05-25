@@ -7,7 +7,9 @@
 A [SwiftBar](https://github.com/swiftbar/SwiftBar) plugin that shows the status of
 NFS shares mounted by macOS autofs, with sudo actions to recover a stale mount.
 
-![nfs-swiftbar menu](assets/nfs-swiftbar-screenshot.png)
+<p align="center">
+  <img src="assets/nfs-swiftbar-screenshot.png" alt="nfs-swiftbar menu" width="418">
+</p>
 
 ## Why
 
