@@ -64,8 +64,8 @@ is_mounted() {
 read_mountpoints() {
     mps=()
     [ -r "$MAP" ] || return
-    local mp opts target rest
-    while read -r mp opts target rest || [ -n "$mp" ]; do
+    local mp target _
+    while read -r mp _ target _ || [ -n "$mp" ]; do
         case "$mp" in ''|\#*) continue ;; esac
         [ -n "$target" ] || continue
         mps+=("$mp")
@@ -267,7 +267,7 @@ ACTIVE=0
 UNREACHABLE=0
 
 # `|| [ -n "$mp" ]` so a final line lacking a trailing newline isn't dropped.
-while read -r mp opts target rest || [ -n "$mp" ]; do
+while read -r mp _ target _ || [ -n "$mp" ]; do
     case "$mp" in ''|\#*) continue ;; esac      # skip blanks/comments
     [ -n "$target" ] || continue                # skip malformed lines
 
