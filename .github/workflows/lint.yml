@@ -11,7 +11,28 @@ jobs:
   shellcheck:
     name: ShellCheck
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # upload SARIF to the Security tab
     steps:
       - uses: actions/checkout@v4
-      - name: Run ShellCheck
-        uses: ludeeus/action-shellcheck@2.0.0
+
+      - name: Install shellcheck-sarif converter
+        run: |
+          curl -fsSL \
+            https://github.com/psastras/sarif-rs/releases/download/shellcheck-sarif-v0.8.0/shellcheck-sarif-x86_64-unknown-linux-gnu \
+            -o /usr/local/bin/shellcheck-sarif
+          chmod +x /usr/local/bin/shellcheck-sarif
+
+      - name: Run ShellCheck and convert to SARIF
+        run: |
+          shellcheck --format=json1 nfs.30s.sh > shellcheck.json || true
+          shellcheck-sarif < shellcheck.json > shellcheck.sarif
+
+      - name: Upload SARIF to code scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: shellcheck.sarif
+
+      - name: Fail on ShellCheck findings
+        run: shellcheck nfs.30s.sh

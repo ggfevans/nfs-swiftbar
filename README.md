@@ -1,94 +1,75 @@
 # nfs-swiftbar
 
+[![lint](https://github.com/ggfevans/nfs-swiftbar/actions/workflows/lint.yml/badge.svg)](https://github.com/ggfevans/nfs-swiftbar/actions/workflows/lint.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Platform: macOS](https://img.shields.io/badge/platform-macOS-000000?logo=apple&logoColor=white)
 
-A [SwiftBar](https://github.com/swiftbar/SwiftBar) plugin that puts the status of
-your NFS shares in the macOS menu bar — and gives you one-click `sudo` recovery
-when a mount goes stale. Built for shares mounted on demand by **autofs**.
+A [SwiftBar](https://github.com/swiftbar/SwiftBar) plugin that shows the status of
+NFS shares mounted by macOS autofs, with sudo actions to recover a stale mount.
 
-![nfs-swiftbar showing three active shares and the per-share action submenu](assets/nfs-swiftbar-screenshot.png)
+![nfs-swiftbar menu](assets/nfs-swiftbar-screenshot.png)
 
 ## Why
 
-Under autofs, shares mount on access and unmount themselves after an idle period,
-so there's no Finder window telling you what's currently attached or whether a
-server is reachable. This plugin surfaces that at a glance, without interfering
-with the automounter — the background poll never touches the mount paths, so it
-won't keep idle shares alive (see [Design notes](#design-notes)).
+Under autofs, shares mount on access and unmount after an idle period, so nothing
+tells you what is currently mounted or whether a server is up. This plugin shows
+that in the menu bar. Its background poll never reads the mount paths, so it does
+not keep idle shares alive.
 
-## Features
+## Status
 
-- **At-a-glance status** per share: active, idle, or unreachable.
-- **Honest reachability** — probes the nfsd port (TCP 2049), so a share is only
-  "reachable" when NFS is actually answering, not merely when the host pings.
-- **Recovery that fits autofs** — force-remount a stale handle, or unmount on
-  demand, individually or across all shares in a single admin prompt.
-- **Stays out of the way** — the 30s poll reads the mount table and a port
-  probe only; it never accesses the mount paths, preserving the idle timeout.
-- **Zero runtime** — pure `bash` plus stock macOS tools.
+Shares are read from `/etc/auto_direct`. Each one renders as:
 
-## Status indicators
-
-The plugin reads your shares from `/etc/auto_direct` (single source of truth) and
-renders each one:
-
-| Indicator | Meaning |
-|-----------|---------|
-| 🟢 green · active | mounted and active right now |
-| ⚪️ grey · idle | reachable, just not mounted (healthy — past the autofs idle timeout) |
-| 🔴 red · unreachable | nfsd (TCP 2049) not answering — server down, NFS stopped, or off-VPN |
+| Dot | State | Meaning |
+|-----|-------|---------|
+| 🟢 | active | mounted now |
+| ⚪️ | idle | reachable but not mounted (normal after the idle timeout) |
+| 🔴 | unreachable | nfsd (TCP 2049) not answering |
 
 The menu-bar icon is green if any share is active, red if any host is
-unreachable, otherwise grey; the header shows `N/total active`.
+unreachable, otherwise grey. The header shows `N/total active`.
 
-## Menu actions
+## Actions
 
-**Per share** (sudo actions prompt once via a standard macOS admin dialog):
+Per share (sudo actions use a single admin prompt):
 
-| Action | What it does |
-|--------|--------------|
-| Reveal in Finder | Opens the path, triggering the automount. |
-| Show free space | `df` the share and report `Size / Used / Free`. *Active shares only* — so checking capacity never automounts an idle one. |
-| Unmount (sudo) | `umount -f` **without** re-triggering, so the share drops to idle now instead of waiting out the timeout. *Active shares only.* |
-| Force remount (sudo) | `umount -f` then re-access so autofs mounts it fresh. The useful recovery move when a `soft` mount goes stale after a network blip. |
+| Action | Effect |
+|--------|--------|
+| Reveal in Finder | opens the path, which mounts it |
+| Show free space | reports `df` output (active shares only) |
+| Unmount (sudo) | `umount -f`, no remount (active shares only) |
+| Force remount (sudo) | `umount -f`, then re-access to mount fresh |
 
-**Root menu:**
+Root menu:
 
-| Action | What it does |
-|--------|--------------|
-| Force remount all (sudo) | Force-remount every share. One admin prompt; reports `Force-remounted N/total`. (Brings idle shares up too; they idle out again later.) |
-| Unmount all (sudo) | Force-unmount every share, no re-trigger. One prompt; reports `Unmounted N/total`. |
+| Action | Effect |
+|--------|--------|
+| Force remount all (sudo) | remount every share in one prompt |
+| Unmount all (sudo) | unmount every share in one prompt |
 
 ## Requirements
 
-- **macOS** with [SwiftBar](https://github.com/swiftbar/SwiftBar) installed.
-- NFS shares mounted via **autofs direct maps** declared in `/etc/auto_direct`
-  (see [Configuration](#configuration)).
-- Stock tools only: `bash`, `mount`, `nc`, `df`, `osascript`, `perl` — all
-  present on a default macOS install.
+- macOS with [SwiftBar](https://github.com/swiftbar/SwiftBar).
+- NFS shares in an autofs direct map at `/etc/auto_direct` (see Configuration).
+- Stock tools: `bash`, `mount`, `nc`, `df`, `osascript`, `perl`.
 
 ## Configuration
 
-The plugin parses `/etc/auto_direct`, the autofs **direct map** that lists your
-mounts. Each non-comment line is `mountpoint  options  host:export`, e.g.:
+The plugin parses `/etc/auto_direct`. Each line is `mountpoint  options  host:export`:
 
 ```
 /Volumes/media      -fstype=nfs,resvport,rw,soft,intr,tcp   nas.example.lan:/export/media
 /Volumes/backups    -fstype=nfs,resvport,rw,soft,intr,tcp   nas.example.lan:/export/backups
 ```
 
-The map is wired into the automounter via `/etc/auto_master`:
+Wire it into the automounter in `/etc/auto_master`:
 
 ```
 /-    auto_direct
 ```
 
-…then `sudo automount -vc` to load it. The plugin only needs the **mountpoint**
-and the **host** (the part before `:` in the third column) from each line.
-
-> Using a different map file? Edit the `MAP="/etc/auto_direct"` line near the top
-> of `nfs.30s.sh`.
+Then run `sudo automount -vc`. To use a different map file, edit the `MAP`
+variable at the top of `nfs.30s.sh`.
 
 ## Install
 
@@ -97,41 +78,29 @@ git clone https://github.com/ggfevans/nfs-swiftbar.git
 ln -sf "$PWD/nfs-swiftbar/nfs.30s.sh" "$HOME/Documents/SwiftBar/nfs.30s.sh"
 ```
 
-`~/Documents/SwiftBar` should be your SwiftBar plugin directory — confirm with:
+Confirm your SwiftBar plugin directory with
+`defaults read com.ameba.SwiftBar PluginDirectory`, then run SwiftBar > Refresh
+All. The `30s` in the filename sets the refresh interval; rename it (e.g.
+`nfs.1m.sh`) to change it.
 
-```bash
-defaults read com.ameba.SwiftBar PluginDirectory
-```
+## Idle behaviour
 
-Then **SwiftBar → Refresh All**. The `30s` in the filename sets the refresh
-interval; rename (e.g. `nfs.1m.sh`) to change it.
-
-## Design notes
-
-**Don't defeat the idle timeout.** The 30s poll never `ls`/`stat`/`df`s the
-mount paths — status comes only from the `mount` table and the TCP port probe.
-Accessing a path would re-trigger the automounter every cycle and keep shares
-mounted forever. For the same reason, **Show free space** (which must `df`, and
-so touches the share) is a deliberate, click-only action on active shares rather
-than part of the poll.
-
-**Forced unmounts.** Unmount and force-remount use `umount -f` so an unreachable
-server can't hang the operation; the re-trigger access is additionally bounded
-by a `perl` alarm. Best-effort: a hard mount wedged in uninterruptible I/O may
-still block.
+The poll reads the `mount` table and probes TCP 2049. It never runs `ls`, `stat`
+or `df` on a mount path, since that would re-trigger the automounter on every
+cycle. `df` (Show free space) and path access (Reveal in Finder) run only on a
+click. Unmount and remount use `umount -f` so an unreachable server cannot hang
+them, and the re-access is bounded by a `perl` alarm.
 
 ## Development
-
-Render all three states from fixture data — no real mounts or network touched —
-to eyeball icons and colours:
 
 ```bash
 ./nfs.30s.sh --selftest
 ```
 
-The live poll and `--selftest` share one rendering function (`emit_share`), so
-the fixture output stays faithful to the real thing.
+Renders all three states from fixture data without touching real mounts. The
+live poll and `--selftest` share one function (`emit_share`), so the output
+matches.
 
 ## License
 
-[MIT](LICENSE) © Gareth Evans
+[MIT](LICENSE)
