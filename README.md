@@ -103,6 +103,11 @@ Renders all three states from fixture data without touching real mounts. The
 live poll and `--selftest` share one function (`emit_share`), so the output
 matches.
 
+## Security
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md). Please use GitHub's
+private vulnerability reporting rather than a public issue.
+
 ## License
 
 [MIT](LICENSE)
