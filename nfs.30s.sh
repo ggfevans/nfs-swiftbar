@@ -2,7 +2,7 @@
 # SwiftBar plugin: NFS automount status + recovery
 #
 # <bitbar.title>NFS Mounts</bitbar.title>
-# <bitbar.version>v1.3</bitbar.version>
+# <bitbar.version>v1.4</bitbar.version>
 # <bitbar.author>Gareth Evans</bitbar.author>
 # <bitbar.author.github>ggfevans</bitbar.author.github>
 # <bitbar.desc>Status of autofs NFS shares (active / idle / unreachable) with a sudo force-remount recovery action. Reads mounts from /etc/auto_direct.</bitbar.desc>
@@ -59,6 +59,39 @@ is_mounted() {
     /sbin/mount | grep -q " on $1 (nfs"
 }
 
+# read_mountpoints — populate the global `mps` array from the map (one entry
+# per valid line). Leaves `mps` empty if the map is unreadable or has no shares.
+read_mountpoints() {
+    mps=()
+    [ -r "$MAP" ] || return
+    local mp opts target rest
+    while read -r mp opts target rest || [ -n "$mp" ]; do
+        case "$mp" in ''|\#*) continue ;; esac
+        [ -n "$target" ] || continue
+        mps+=("$mp")
+    done < "$MAP"
+}
+
+# sudo_umount_all <mountpoint>... — chain `umount -f` for every given path into
+# ONE privileged osascript call, so the admin prompt appears once. `umount -f`
+# (forced) is used so a dead/unreachable server can't hang the unmount. Each
+# path is printf %q-quoted for the inner /bin/sh, then AppleScript-escaped.
+sudo_umount_all() {
+    local cmd="" mp
+    for mp in "$@"; do
+        cmd="$cmd/sbin/umount -f $(printf '%q' "$mp"); "
+    done
+    osascript -e "do shell script \"$(as_escape "$cmd")\" with administrator privileges" >/dev/null 2>&1
+}
+
+# retrigger <mountpoint> — access the path as the normal user to let autofs
+# re-mount, bounded by a 5s alarm so a dead server can't hang us (macOS has no
+# `timeout(1)`; perl is stock). Best-effort: a hard mount wedged in
+# uninterruptible I/O may still block.
+retrigger() {
+    perl -e 'alarm 5; exec @ARGV' /bin/ls "$1" >/dev/null 2>&1
+}
+
 # ---------------------------------------------------------------------------
 # Action dispatch: `nfs.30s.sh remount <mountpoint>`
 # Prompts once for admin rights, force-unmounts the (possibly stale) handle,
@@ -68,21 +101,28 @@ if [ "${1:-}" = "remount" ]; then
     mp="${2:-}"
     [ -n "$mp" ] || exit 0
     name="${mp#/Volumes/}"
-
-    # Path is printf %q-quoted so it's safe for the inner /bin/sh, then the
-    # whole command is AppleScript-escaped for the osascript -e literal.
-    shell_cmd="/sbin/umount -f $(printf '%q' "$mp")"
-    osascript -e "do shell script \"$(as_escape "$shell_cmd")\" with administrator privileges" >/dev/null 2>&1
-
-    # Re-trigger the mount as the normal user, bounded by a 5s alarm so a dead
-    # server can't hang the action. macOS has no `timeout(1)`; perl is stock.
-    # (Best-effort: a hard mount wedged in uninterruptible I/O may still block.)
-    perl -e 'alarm 5; exec @ARGV' /bin/ls "$mp" >/dev/null 2>&1
-
+    sudo_umount_all "$mp"
+    retrigger "$mp"
     if is_mounted "$mp"; then
         notify "NFS · $name" "Remounted OK"
     else
         notify "NFS · $name" "Remount failed — host may be unreachable"
+    fi
+    exit 0
+fi
+
+# `nfs.30s.sh unmount <mountpoint>` — force-unmount a single share WITHOUT
+# re-triggering it (the share drops to idle immediately). autofs will still
+# re-mount on next access; this just detaches it now.
+if [ "${1:-}" = "unmount" ]; then
+    mp="${2:-}"
+    [ -n "$mp" ] || exit 0
+    name="${mp#/Volumes/}"
+    sudo_umount_all "$mp"
+    if is_mounted "$mp"; then
+        notify "NFS · $name" "Unmount failed (busy?)"
+    else
+        notify "NFS · $name" "Unmounted"
     fi
     exit 0
 fi
@@ -100,32 +140,32 @@ if [ "${1:-}" = "freespace" ]; then
     exit 0
 fi
 
-# `nfs.30s.sh remount-all` — force-remount every share in the map. All the
-# `umount -f`s are chained into ONE privileged osascript call, so the user is
-# prompted for admin rights just once (not once per share). Each share is then
-# re-triggered as the normal user, bounded, and a summary is reported.
+# `nfs.30s.sh remount-all` — force-remount every share in the map. The chained
+# `umount -f` (one prompt) is followed by a bounded re-trigger of each share.
 if [ "${1:-}" = "remount-all" ]; then
-    [ -r "$MAP" ] || exit 0
-    mps=()
-    while read -r mp opts target rest || [ -n "$mp" ]; do
-        case "$mp" in ''|\#*) continue ;; esac
-        [ -n "$target" ] || continue
-        mps+=("$mp")
-    done < "$MAP"
+    read_mountpoints
     [ "${#mps[@]}" -gt 0 ] || exit 0
-
-    cmd=""
-    for mp in "${mps[@]}"; do
-        cmd="$cmd/sbin/umount -f $(printf '%q' "$mp"); "
-    done
-    osascript -e "do shell script \"$(as_escape "$cmd")\" with administrator privileges" >/dev/null 2>&1
-
+    sudo_umount_all "${mps[@]}"
     ok=0
     for mp in "${mps[@]}"; do
-        perl -e 'alarm 5; exec @ARGV' /bin/ls "$mp" >/dev/null 2>&1
+        retrigger "$mp"
         is_mounted "$mp" && ok=$((ok + 1))
     done
     notify "NFS" "Force-remounted $ok/${#mps[@]} share(s)"
+    exit 0
+fi
+
+# `nfs.30s.sh unmount-all` — force-unmount every share in the map (one prompt),
+# WITHOUT re-triggering. Everything drops to idle until next access.
+if [ "${1:-}" = "unmount-all" ]; then
+    read_mountpoints
+    [ "${#mps[@]}" -gt 0 ] || exit 0
+    sudo_umount_all "${mps[@]}"
+    done_count=0
+    for mp in "${mps[@]}"; do
+        is_mounted "$mp" || done_count=$((done_count + 1))
+    done
+    notify "NFS" "Unmounted $done_count/${#mps[@]} share(s)"
     exit 0
 fi
 
@@ -146,10 +186,11 @@ emit_share() {
         unreachable) append "$name · unreachable | sfimage=circle.fill color=$RED bash=\"open\" param1=\"$mp\" terminal=false refresh=true" ;;
     esac
     append "-- Reveal in Finder | bash=\"open\" param1=\"$mp\" terminal=false refresh=true"
-    # Free space needs df, which would automount an idle share — so offer it
-    # only when the share is already active, to avoid a surprise mount.
+    # Free space and Unmount only make sense for a mounted share, so offer them
+    # only when active (free space would also automount an idle one via df).
     if [ "$state" = "active" ]; then
         append "-- Show free space | bash=\"$SELF\" param1=\"freespace\" param2=\"$mp\" terminal=false refresh=false"
+        append "-- Unmount (sudo) | bash=\"$SELF\" param1=\"unmount\" param2=\"$mp\" terminal=false refresh=true"
     fi
     append "-- Force remount (sudo) | bash=\"$SELF\" param1=\"remount\" param2=\"$mp\" terminal=false refresh=true"
 }
@@ -181,6 +222,7 @@ if [ "${1:-}" = "--selftest" ]; then
     printf '%s' "$DROPDOWN"
     echo "---"
     echo "Force remount all (sudo) | bash=\"$SELF\" param1=\"remount-all\" terminal=false refresh=true"
+    echo "Unmount all (sudo) | bash=\"$SELF\" param1=\"unmount-all\" terminal=false refresh=true"
     echo "Refresh | bash=\"true\" terminal=false refresh=true"
     exit 0
 fi
@@ -250,5 +292,8 @@ echo "NFS Mounts · ${ACTIVE}/${TOTAL} active | disabled=true"
 echo "---"
 printf '%s' "$DROPDOWN"
 echo "---"
-[ "$TOTAL" -gt 0 ] && echo "Force remount all (sudo) | bash=\"$SELF\" param1=\"remount-all\" terminal=false refresh=true"
+if [ "$TOTAL" -gt 0 ]; then
+    echo "Force remount all (sudo) | bash=\"$SELF\" param1=\"remount-all\" terminal=false refresh=true"
+    echo "Unmount all (sudo) | bash=\"$SELF\" param1=\"unmount-all\" terminal=false refresh=true"
+fi
 echo "Refresh | bash=\"true\" terminal=false refresh=true"

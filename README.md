@@ -23,6 +23,10 @@ grey if everything's merely idle. Header shows `N/total active`.
 - **Show free space** — `df` the share and report `Size / Used / Free` in a
   notification. Click-only by design, and shown only on **active** shares so
   checking capacity never accidentally automounts an idle one.
+- **Unmount (sudo)** — `umount -f` the share *without* re-triggering it, so it
+  drops to idle immediately instead of waiting out the 1h timeout. autofs still
+  re-mounts on next access. Shown only on active shares (nothing to unmount
+  otherwise). Forced (`-f`) so a dead server can't hang the unmount.
 - **Force remount (sudo)** — `umount -f` the stale handle then re-access to let
   autofs re-trigger a fresh mount. Prompts once for admin rights via `osascript`.
   This is the genuinely useful action under autofs: it recovers a stale `soft`
@@ -35,6 +39,9 @@ grey if everything's merely idle. Header shows `N/total active`.
   `osascript` call, so you're prompted for admin **once**, not per share; each
   share is then re-triggered and a `Force-remounted N/total` summary is shown.
   Note this brings idle shares up too (they'll idle-unmount again after 1h).
+- **Unmount all (sudo)** — force-unmounts every share in one prompt, *without*
+  re-triggering. Everything drops to idle until next access; reports an
+  `Unmounted N/total` summary.
 
 ## Design note — don't defeat the idle timeout
 
