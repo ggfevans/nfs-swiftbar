@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # SwiftBar plugin: NFS automount status + recovery
 #
 # <bitbar.title>NFS Mounts</bitbar.title>
@@ -8,6 +8,15 @@
 # <bitbar.desc>Status of autofs NFS shares (active / idle / unreachable) with a sudo force-remount recovery action. Reads mounts from /etc/auto_direct.</bitbar.desc>
 # <bitbar.dependencies>bash,mount,nc,df,osascript,perl</bitbar.dependencies>
 # <swiftbar.hideAbout>true</swiftbar.hideAbout>
+#
+# <xbar.title>NFS Mounts</xbar.title>
+# <xbar.version>v26.05.1</xbar.version>
+# <xbar.author>Gareth Evans</xbar.author>
+# <xbar.author.github>ggfevans</xbar.author.github>
+# <xbar.desc>Status of autofs NFS shares (active / idle / unreachable) with a sudo force-remount recovery action. Reads mounts from /etc/auto_direct.</xbar.desc>
+# <xbar.image>https://raw.githubusercontent.com/ggfevans/nfs-swiftbar/main/assets/nfs-swiftbar-screenshot.png</xbar.image>
+# <xbar.abouturl>https://github.com/ggfevans/nfs-swiftbar</xbar.abouturl>
+# <xbar.dependencies>bash,mount,nc,df,osascript,perl</xbar.dependencies>
 #
 # Design note: the 30s poll deliberately NEVER accesses the mount paths
 # (no ls/df/stat on them) — doing so would re-trigger the automounter every
