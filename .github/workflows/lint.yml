@@ -36,3 +36,11 @@ jobs:
 
       - name: Fail on ShellCheck findings
         run: shellcheck nfs.30s.sh
+
+      - name: Check version tags in sync
+        run: |
+          bitver=$(sed -n 's/.*<bitbar.version>v\([^<]*\)<.*/\1/p' nfs.30s.sh)
+          xver=$(sed -n 's/.*<xbar.version>v\([^<]*\)<.*/\1/p' nfs.30s.sh)
+          [ -n "$bitver" ] || { echo "::error::<bitbar.version> not found"; exit 1; }
+          [ -n "$xver" ]   || { echo "::error::<xbar.version> not found"; exit 1; }
+          [ "$bitver" = "$xver" ] || { echo "::error::version tags differ: bitbar=$bitver xbar=$xver"; exit 1; }
