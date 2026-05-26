@@ -4,6 +4,11 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres loosely to [Semantic Versioning](https://semver.org/).
 
+Add entries under **[Unreleased]** as you go; the release workflow promotes that
+section to a dated version and uses it as the GitHub Release notes.
+
+## [Unreleased]
+
 ## [1.4] - 2026-05-25
 
 ### Added

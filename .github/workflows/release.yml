@@ -1,0 +1,72 @@
+name: release
+
+# Manual release. Click "Run workflow", enter the version (X.Y.Z, no v prefix).
+# The job:
+#   1. validates the version
+#   2. syncs <bitbar.version> in nfs.30s.sh
+#   3. promotes the CHANGELOG [Unreleased] section to [X.Y.Z] - <date>,
+#      re-seeds an empty [Unreleased], and uses the moved notes as release notes
+#   4. commits the bump, tags vX.Y.Z, pushes
+#   5. creates the GitHub Release
+#
+# So the only manual step is keeping the [Unreleased] CHANGELOG section current.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version X.Y.Z (no v prefix)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate version
+        run: |
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            || { echo "::error::version must be X.Y.Z (got '$VERSION')"; exit 1; }
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "::error::tag v$VERSION already exists"; exit 1
+          fi
+
+      - name: Bump plugin version and roll the CHANGELOG
+        run: |
+          sed -i -E "s#<bitbar.version>v[^<]*</bitbar.version>#<bitbar.version>v${VERSION}</bitbar.version>#" nfs.30s.sh
+          python3 - "$VERSION" "$(date +%F)" <<'PY'
+          import sys, re, pathlib
+          version, date = sys.argv[1], sys.argv[2]
+          path = pathlib.Path("CHANGELOG.md")
+          text = path.read_text()
+          if "## [Unreleased]" not in text:
+              sys.exit("::error::no '## [Unreleased]' section in CHANGELOG.md")
+          m = re.search(r"## \[Unreleased\]\s*(.*?)(?=\n## \[)", text, re.S)
+          notes = (m.group(1).strip() if m else "") or "Maintenance release; no documented changes."
+          pathlib.Path("RELEASE_NOTES.md").write_text(notes + "\n")
+          text = text.replace(
+              "## [Unreleased]",
+              f"## [Unreleased]\n\n## [{version}] - {date}",
+              1,
+          )
+          path.write_text(text)
+          PY
+
+      - name: Commit, tag, push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add nfs.30s.sh CHANGELOG.md
+          git commit -m "Release v${VERSION}"
+          git tag "v${VERSION}"
+          git push origin HEAD --tags
+
+      - name: Create GitHub Release
+        run: gh release create "v${VERSION}" --title "v${VERSION}" --notes-file RELEASE_NOTES.md
