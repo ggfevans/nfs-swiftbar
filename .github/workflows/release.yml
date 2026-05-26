@@ -3,7 +3,7 @@ name: release
 # Manual release. Click "Run workflow", enter the version (X.Y.Z, no v prefix).
 # The job:
 #   1. validates the version
-#   2. syncs <bitbar.version> in nfs.30s.sh
+#   2. syncs <bitbar.version> and <xbar.version> in nfs.30s.sh
 #   3. promotes the CHANGELOG [Unreleased] section to [X.Y.Z] - <date>,
 #      re-seeds an empty [Unreleased], and uses the moved notes as release notes
 #   4. commits the bump, tags vX.Y.Z, pushes
@@ -41,6 +41,7 @@ jobs:
       - name: Bump plugin version and roll the CHANGELOG
         run: |
           sed -i -E "s#<bitbar.version>v[^<]*</bitbar.version>#<bitbar.version>v${VERSION}</bitbar.version>#" nfs.30s.sh
+          sed -i -E "s#<xbar.version>v[^<]*</xbar.version>#<xbar.version>v${VERSION}</xbar.version>#" nfs.30s.sh
           python3 - "$VERSION" "$(date +%F)" <<'PY'
           import sys, re, pathlib
           version, date = sys.argv[1], sys.argv[2]
