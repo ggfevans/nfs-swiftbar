@@ -9,6 +9,8 @@ section to a dated version and uses it as the GitHub Release notes.
 
 ## [Unreleased]
 
+## [26.05.1] - 2026-05-26
+
 ## [1.4] - 2026-05-25
 
 ### Added

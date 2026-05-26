@@ -2,7 +2,7 @@
 # SwiftBar plugin: NFS automount status + recovery
 #
 # <bitbar.title>NFS Mounts</bitbar.title>
-# <bitbar.version>v1.4</bitbar.version>
+# <bitbar.version>v26.05.1</bitbar.version>
 # <bitbar.author>Gareth Evans</bitbar.author>
 # <bitbar.author.github>ggfevans</bitbar.author.github>
 # <bitbar.desc>Status of autofs NFS shares (active / idle / unreachable) with a sudo force-remount recovery action. Reads mounts from /etc/auto_direct.</bitbar.desc>
